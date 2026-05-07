@@ -10,8 +10,10 @@ import {
   loadDatasetState,
   loadScopedSyncIndexes,
   loadSyncIndex,
+  saveDatasetState,
+  saveScopedSyncIndexes,
+  saveSyncIndex,
   migrateLegacyIndex,
-  SCOPED_SYNC_INDEX_PATH,
   SYNC_INDEX_PATH,
 } from "./persistence.js";
 import { datasetNameForScope, isMultiScopeEnabled, routeFileToScope } from "./scope.js";
@@ -132,6 +134,54 @@ const memoryCogneePlugin = {
         const result = await syncFiles(client, files, files, syncIndex, cfg, logger);
         if (result.datasetId) datasetId = result.datasetId;
         return result;
+      }
+    }
+
+    async function clearLocalStateEverything(): Promise<void> {
+      datasetId = undefined;
+      syncIndex = { entries: {} };
+      scopedIndexes = {};
+
+      await Promise.all([
+        saveDatasetState({}),
+        saveSyncIndex({ entries: {} }),
+        saveScopedSyncIndexes({}),
+      ]);
+    }
+
+    async function clearLocalStateForDataset(datasetName: string): Promise<void> {
+      const state = await loadDatasetState();
+      if (state[datasetName]) {
+        delete state[datasetName];
+        await saveDatasetState(state);
+      }
+
+      const singleScopeMatches =
+        !multiScope &&
+        (datasetName === cfg.datasetName || datasetName === syncIndex.datasetName);
+
+      if (singleScopeMatches) {
+        datasetId = undefined;
+        syncIndex = { entries: {} };
+        await saveSyncIndex(syncIndex);
+      }
+
+      if (multiScope) {
+        let changed = false;
+        for (const scope of MEMORY_SCOPES) {
+          const expectedName = datasetNameForScope(scope, cfg);
+          const idx = scopedIndexes[scope];
+          const actualName = idx?.datasetName ?? expectedName;
+
+          if (actualName === datasetName || expectedName === datasetName) {
+            delete scopedIndexes[scope];
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          await saveScopedSyncIndexes(scopedIndexes);
+        }
       }
     }
 
@@ -336,11 +386,21 @@ const memoryCogneePlugin = {
             everything: opts.everything,
           });
           if (result.deleted) {
-            console.log(opts.everything
-              ? "Wiped all user data from Cognee."
-              : `Wiped dataset "${opts.dataset}" from Cognee.`);
-            console.log("Local sync index still references the wiped data; run 'openclaw cognee index' to reconcile.");
-            process.exit(0);
+            try {
+              if (opts.everything) {
+                await clearLocalStateEverything();
+                console.log("Wiped all user data from Cognee and cleared local sync state.");
+              } else {
+                await clearLocalStateForDataset(opts.dataset!);
+                console.log(`Wiped dataset "${opts.dataset}" from Cognee and cleared matching local sync state.`);
+              }
+              console.log("Run 'openclaw cognee index' to re-ingest current workspace files.");
+              process.exit(0);
+            } catch (error) {
+              console.log(`Remote delete succeeded, but failed to clear local sync state: ${error instanceof Error ? error.message : String(error)}`);
+              console.log("You can still re-index, or manually clear ~/.openclaw/memory/cognee/*.");
+              process.exit(1);
+            }
           }
           console.log(`Forget failed: ${result.error ?? "unknown error"}`);
           process.exit(1);
