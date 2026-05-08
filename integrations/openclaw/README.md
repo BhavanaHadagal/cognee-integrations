@@ -69,11 +69,15 @@ plugins:
   entries:
     cognee-openclaw:
       enabled: true
+      hooks:
+        allowConversationAccess: true   # see note below
       config:
         baseUrl: "http://localhost:8000"
         apiKey: "${COGNEE_API_KEY}"
         datasetName: "my-project"
 ```
+
+> `hooks.allowConversationAccess` -> OpenClaw ≥ 2026.4.27 blocks non-bundled plugins from registering the `agent_end` hook unless this flag is set. Without it, file sync memory operations after each agent turn is silently disabled. The gateway still loads the plugin, but file changes the agent makes won't reach Cognee until the next manual `openclaw cognee index` or gateway start. Restart the gateway after adding the flag: `openclaw gateway stop && openclaw gateway start`.
 
 ### Cognee Cloud
 
