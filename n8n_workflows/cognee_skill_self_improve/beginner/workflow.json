@@ -42,18 +42,6 @@
               "type": "string"
             },
             {
-              "id": "result-summary",
-              "name": "result_summary",
-              "value": "The review did not flag that get_dataset(requested_dataset) is returned without verifying the dataset belongs to the authenticated user, without handling a missing dataset (404), and without tests for owner / non-owner / missing-dataset cases.",
-              "type": "string"
-            },
-            {
-              "id": "eval-score",
-              "name": "eval_score",
-              "value": 0.3,
-              "type": "number"
-            },
-            {
               "id": "score-threshold",
               "name": "score_threshold",
               "value": 0.9,
@@ -63,6 +51,12 @@
               "id": "approved",
               "name": "approved",
               "value": "1",
+              "type": "string"
+            },
+            {
+              "id": "score-instructions",
+              "name": "score_instructions",
+              "value": "When you have completed the review, critically grade YOUR OWN review against the change described in the task. Score each dimension from 0.0 to 1.0:\n- coverage: did the review catch the issues actually present in the change?\n- correctness: are the reported findings valid (no hallucinated or wrong issues)?\n- actionability: does each finding include a concrete fix and specific tests?\n- instruction_adherence: did the output follow the skill's required format and rules?\n- severity_calibration: are the severities assigned sensibly?\nSet \"score\" to the simple average (arithmetic mean) of these five dimension scores, rounded to two decimals. Set \"missing_instruction\" to the single most impactful instruction the skill should ADD to fix its biggest weakness. Set \"result_summary\" to one or two sentences describing what the review got wrong or missed.\nRespond with ONLY a single JSON object and nothing else (no prose, no markdown code fences), exactly in this shape:\n{\"review\": \"<full review text>\", \"dimensions\": [{\"name\": \"coverage\", \"score\": 0.0}, {\"name\": \"correctness\", \"score\": 0.0}, {\"name\": \"actionability\", \"score\": 0.0}, {\"name\": \"instruction_adherence\", \"score\": 0.0}, {\"name\": \"severity_calibration\", \"score\": 0.0}], \"score\": 0.0, \"missing_instruction\": \"...\", \"result_summary\": \"...\"}",
               "type": "string"
             }
           ]
@@ -107,7 +101,7 @@
         "operation": "reviewSkill",
         "skillName": "={{$('Demo Controls').item.json.skill_name}}",
         "skillDatasetName": "={{$('Demo Controls').item.json.dataset_name}}",
-        "reviewQuery": "={{$('Demo Controls').item.json.task_text}}",
+        "reviewQuery": "={{$('Demo Controls').item.json.task_text + '\\n\\n' + $('Demo Controls').item.json.score_instructions}}",
         "reviewMaxIter": 6,
         "reviewTopK": 15
       },
@@ -138,7 +132,7 @@
           "conditions": [
             {
               "id": "should-improve",
-              "leftValue": "={{$('Demo Controls').item.json.eval_score}}",
+              "leftValue": "={{$('Review Skill').item.json.score}}",
               "rightValue": "={{$('Demo Controls').item.json.score_threshold}}",
               "operator": {
                 "type": "number",
@@ -166,8 +160,8 @@
         "skillName": "={{$('Demo Controls').item.json.skill_name}}",
         "skillDatasetName": "={{$('Demo Controls').item.json.dataset_name}}",
         "taskText": "={{$('Demo Controls').item.json.task_text}}",
-        "resultSummary": "={{$('Demo Controls').item.json.result_summary}}",
-        "successScore": "={{$('Demo Controls').item.json.eval_score}}",
+        "resultSummary": "=Review missed: {{$('Review Skill').item.json.result_summary}}\nMissing instruction: {{$('Review Skill').item.json.missing_instruction}}",
+        "successScore": "={{$('Review Skill').item.json.score}}",
         "scoreThreshold": "={{$('Demo Controls').item.json.score_threshold}}"
       },
       "id": "propose-improvement",
